@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GeoQuest AI - Final Tesis</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tween.js/18.6.4/tween.umd.js"></script>
+    <style>
+        .hidden-screen { display: none !important; }
+        .typing-indicator span { display: inline-block; width: 6px; height: 6px; background-color: #6366f1; border-radius: 50%; margin: 0 2px; animation: bounce 1.4s infinite ease-in-out both; }
+        .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
+        .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
+        .toggle-btn-active { @apply ring-4 ring-green-300 shadow-xl; }
+        .toggle-btn-inactive { @apply opacity-70; }
+    </style>
+</head>
+<body class="bg-blue-50 h-screen font-sans overflow-hidden text-gray-800">
+
+    <div id="layar-login" class="flex items-center justify-center h-full">
+        <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md text-center transform transition hover:scale-105">
+            <div class="w-20 h-20 bg-indigo-600 text-white rounded-full flex items-center justify-center text-4xl mx-auto mb-4 shadow-lg animate-bounce">🧭</div>
+            <h1 class="text-3xl font-bold text-gray-800 mb-2">GeoQuest AI</h1>
+            <p class="text-gray-500 text-sm mb-6">Aplikasi Pembelajaran Visual Spasial Kubus & Balok Kelas 6 SD</p>
+            <input type="text" id="input-nama" placeholder="Masukkan Nama Kamu..." class="w-full px-4 py-3 mb-4 rounded-lg border-2 border-indigo-200 focus:outline-none focus:border-indigo-600 font-bold text-center">
+            <button onclick="masukApp()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg shadow-md transition">Mulai Petualangan 🚀</button>
+        </div>
+    </div>
+
+    <div id="layar-dashboard" class="hidden-screen flex flex-col h-full bg-gray-100">
+        <header class="bg-indigo-800 text-white p-4 shadow-md flex justify-between items-center">
+            <h1 class="text-2xl font-bold flex items-center gap-2">🧭 GeoQuest AI</h1>
+            <button onclick="keluarApp()" class="bg-red-500 hover:bg-red-600 px-4 py-2 rounded-lg font-bold shadow">Keluar</button>
+        </header>
+        <main class="flex-1 p-8 overflow-y-auto flex flex-col items-center">
+            <h2 id="sapaan-dashboard" class="text-3xl font-bold mb-6 text-center">Halo!</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-4xl" id="daftar-misi-dashboard"></div>
+        </main>
+    </div>
+
+    <div id="layar-simulator" class="hidden-screen flex flex-col h-full bg-gray-100">
+        <header class="bg-indigo-900 text-white p-3 flex justify-between items-center shadow-lg z-20">
+            <button onclick="kembaliKeDashboard()" class="bg-gray-700 px-4 py-2 rounded font-bold hover:bg-gray-600 shadow transition">⬅ Menu Utama</button>
+            <div id="navigasi-misi" class="flex gap-2"></div>
+            <button onclick="alert('📸 Jepret! Guru telah menerima buktinya.')" class="bg-red-500 px-4 py-2 rounded font-bold shadow transition hover:bg-red-400">📸 Screenshot</button>
+        </header>
+
+        <main class="flex-1 flex overflow-hidden">
+            <section class="w-[60%] bg-white border-r flex flex-col relative shadow-inner">
+                <div class="p-3 bg-gray-50 border-b flex justify-between items-center"><h2 id="judul-misi-3d" class="font-bold text-gray-700">Kanvas 3D</h2></div>
+                <div class="flex-1 bg-blue-50 relative" id="canvas-area"></div>
+                <div class="min-h-24 bg-gray-200 border-t p-4 flex flex-wrap justify-center items-center gap-3 shadow-inner" id="panel-aksi"></div>
+            </section>
+
+            <section class="w-[40%] bg-gray-50 flex flex-col relative">
+                <div class="p-4 bg-white border-b shadow-sm"><h2 class="font-bold text-gray-800 text-lg">👨‍🏫 Pak Geo AI</h2></div>
+                <div class="flex-1 p-4 overflow-y-auto flex flex-col gap-4" id="chat-box"></div>
+                <div class="p-4 bg-white border-t flex gap-2">
+                    <input type="text" id="user-input" placeholder="Ketik jawabanmu..." class="flex-1 border-2 border-gray-300 rounded-full px-4 py-2 focus:outline-none focus:border-indigo-500 transition" onkeypress="if(event.key === 'Enter') kirimPesan()">
+                    <button id="btn-kirim" onclick="kirimPesan()" class="bg-indigo-600 text-white rounded-full w-12 h-12 shadow transform hover:scale-105">➤</button>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        let namaSiswa = "";
+        let levelTerbuka = parseInt(localStorage.getItem('levelGeoQuest')) || 1;
+        let misiAktif = 1;
+        let is3DInitialized = false;
+        
+        let jaringM1Terpilih = "kubus"; 
+        let isFoldedM1 = false; 
+        let isM3Pisah = false;
+        
+        // --- DATA WARNA DINAMIS ---
+        const paletWarna = [
+            { hex: 0xffeb3b, nama: "Kuning Cerah" },
+            { hex: 0xff3b3b, nama: "Merah Cerah" },
+            { hex: 0x38bdf8, nama: "Biru Muda" },
+            { hex: 0x8b4513, nama: "Coklat" },
+            { hex: 0x86efac, nama: "Hijau Muda" },
+            { hex: 0x9ca3af, nama: "Abu-abu" }
+        ];
+        let warnaAktif = [...paletWarna];
+
+        function acakWarna() {
+            for (let i = warnaAktif.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [warnaAktif[i], warnaAktif[j]] = [warnaAktif[j], warnaAktif[i]];
+            }
+        }
+
+        function gantiLayar(idLayar) {
+            ['layar-login', 'layar-dashboard', 'layar-simulator'].forEach(id => document.getElementById(id).classList.add('hidden-screen'));
+            document.getElementById(idLayar).classList.remove('hidden-screen');
+        }
+
+        function masukApp() {
+            namaSiswa = document.getElementById('input-nama').value.trim();
+            if(!namaSiswa) return alert("Tulis namamu dulu ya pahlawan!");
+            document.getElementById('sapaan-dashboard').innerText = `Selamat Datang, ${namaSiswa}! 🎒`;
+            updateDashboard(); gantiLayar('layar-dashboard');
+        }
+
+        function keluarApp() {
+            namaSiswa = ""; document.getElementById('input-nama').value = "";
+            gantiLayar('layar-login');
+        }
+
+        function kembaliKeDashboard() { updateDashboard(); gantiLayar('layar-dashboard'); }
+
+        function bukaLevel(level) {
+            if(levelTerbuka < level) { levelTerbuka = level; localStorage.setItem('levelGeoQuest', levelTerbuka); }
+        }
+
+        function updateDashboard() {
+            const wadah = document.getElementById('daftar-misi-dashboard');
+            const dataMisi = [
+                {id: 1, w: 'green', i: '⛺', j: 'Misi 1: Jaring Kubus & Balok', d: 'Melipat jaring 6 sisi yang berwarna-warni.'},
+                {id: 2, w: 'yellow', i: '🏢', j: 'Misi 2: Apartemen Terguling', d: 'Menebak perpindahan sisi bangunan yang diputar.'},
+                {id: 3, w: 'purple', i: '📦', j: 'Misi 3: Menghitung Tumpukan', d: 'Menghitung total kubus yang bertumpuk rapat.'},
+                {id: 4, w: 'blue', i: '🚁', j: 'Misi 4: Kamera Drone', d: 'Melihat pola 2D dari susunan balok di udara.'}
+            ];
+            wadah.innerHTML = dataMisi.map(m => m.id <= levelTerbuka ? 
+                `<div class="bg-white p-6 rounded-2xl shadow-md border-t-4 border-${m.w}-500 transform transition hover:-translate-y-1"><div class="text-4xl mb-2">${m.i}</div><h3 class="text-xl font-bold mb-2">${m.j}</h3><p class="text-gray-600 mb-4">${m.d}</p><button onclick="bukaSimulator(${m.id})" class="w-full bg-${m.w}-500 hover:bg-${m.w}-600 text-white font-bold py-2 rounded-lg shadow">Mulai Misi ▶</button></div>` : 
+                `<div class="bg-gray-200 p-6 rounded-2xl shadow border-t-4 border-gray-400 opacity-70"><div class="text-4xl mb-2">🔒</div><h3 class="text-xl font-bold text-gray-500 mb-2">Misi Terkunci</h3><p class="text-gray-500 mb-4">Selesaikan misi sebelumnya.</p></div>`
+            ).join('');
+        }
+
+        function updateNavigasiAtas() {
+            document.getElementById('navigasi-misi').innerHTML = [1,2,3,4].map(i => {
+                let w = ['green', 'yellow', 'purple', 'blue'][i-1];
+                let k = (i === misiAktif) ? 'animate-pulse ring-4 ring-white' : '';
+                return i <= levelTerbuka ? `<button onclick="bukaSimulator(${i})" class="px-3 py-1 bg-${w}-500 text-white rounded text-sm font-bold shadow ${k}">${i}. Misi</button>` : `<button disabled class="px-3 py-1 bg-gray-400 text-white rounded text-sm font-bold shadow opacity-50">🔒 Misi ${i}</button>`;
+            }).join('');
+        }
+
+        // =====================================
+        // REAL AI CHATBOT (GEMINI API)
+        // =====================================
+        const API_KEY = "AIzaSyD4DjjrNM5yiFQWASYCAAUBYGBJpzarFz8"; 
+        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
+        
+        let chatHistory = []; 
+        let konteksMisi = "";
+
+        async function kirimPesan(teksSistem = null, teksTampilBot = null) {
+            const input = document.getElementById('user-input');
+            const btn = document.getElementById('btn-kirim');
+            let teks = teksSistem || input.value.trim(); 
+            if(!teks) return;
+            
+            if(!teksSistem) tambahChat('🧑 ' + namaSiswa, teks, 'bg-indigo-100 self-end'); 
+            input.value = ''; input.disabled = true; btn.disabled = true;
+            
+            chatHistory.push({ role: "user", parts: [{text: teks}] });
+            tambahChatLoading();
+
+            const instruksiGuru = `Kamu adalah Pak Geo, guru Matematika kelas 6 SD yang ramah. Siswa bernama ${namaSiswa} sedang mengerjakan ${konteksMisi}. Tugasmu membimbing dengan metode scaffolding, JANGAN PERNAH memberikan jawaban langsung. Jika salah, beri petunjuk bayangan visual. Jika benar, puji hangat. Pancing murid menghitung atau berimajinasi. Jawab maksimal 3 kalimat padat berbahasa Indonesia.`;
+
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        systemInstruction: { parts: [{ text: instruksiGuru }] },
+                        contents: chatHistory 
+                    })
+                });
+                
+                hapusChatLoading();
+                input.disabled = false; btn.disabled = false; input.focus();
+
+                if(!response.ok) throw new Error("Gagal menyambung");
+                const data = await response.json();
+                
+                const jawaban = teksTampilBot ? teksTampilBot : data.candidates[0].content.parts[0].text;
+                tambahChat('👨‍🏫 Pak Geo', jawaban, 'bg-white border-indigo-200');
+                if(!teksTampilBot) chatHistory.push({ role: "model", parts: [{text: jawaban}] });
+                
+            } catch (err) { 
+                hapusChatLoading();
+                input.disabled = false; btn.disabled = false;
+                tambahChat('👨‍🏫 Pak Geo', 'Maaf Nak, koneksi Pak Geo terputus. Pastikan API Key di kodemu sudah benar ya.', 'bg-red-100 border-red-300'); 
+            }
+        }
+
+        function tambahChat(ikon, teks, style) {
+            let teksFormat = teks.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
+            document.getElementById('chat-box').innerHTML += `<div class="flex gap-2 w-11/12 mt-2 ${style.includes('self-end')?'justify-end':''}"><div class="p-3 rounded-xl shadow border ${style} text-sm leading-relaxed"><div class="font-bold mb-1 text-indigo-800">${ikon}</div>${teksFormat}</div></div>`;
+            document.getElementById('chat-box').scrollTop = document.getElementById('chat-box').scrollHeight;
+        }
+
+        function tambahChatLoading() {
+            document.getElementById('chat-box').innerHTML += `<div id="loading-chat" class="flex gap-2 w-11/12 mt-2"><div class="p-3 rounded-xl shadow border bg-white text-sm"><div class="font-bold mb-1 text-indigo-800">👨‍🏫 Pak Geo</div><div class="typing-indicator mt-1"><span></span><span></span><span></span></div></div></div>`;
+            document.getElementById('chat-box').scrollTop = document.getElementById('chat-box').scrollHeight;
+        }
+        function hapusChatLoading() { const l = document.getElementById('loading-chat'); if(l) l.remove(); }
+
+        // =====================================
+        // THREE.JS (MESIN 3D)
+        // =====================================
+        let scene, camera, renderer;
+        let objekAktif = []; 
+        let grupUtama; 
+        
+        let objTutup, engselKiri, engselKanan, engselDepan, engselBelakang, engselTutup; 
+        let objApartemen, grupKargo; 
+
+        function inisialisasi3D() {
+            if(is3DInitialized) return;
+            const container = document.getElementById('canvas-area');
+            scene = new THREE.Scene(); scene.background = new THREE.Color(0xeff6ff);
+            camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            container.appendChild(renderer.domElement);
+            scene.add(new THREE.DirectionalLight(0xffffff, 1).position.set(5, 10, 7));
+            scene.add(new THREE.AmbientLight(0x606060));
+            
+            function animate(t) { requestAnimationFrame(animate); TWEEN.update(t); renderer.render(scene, camera); }
+            animate(); is3DInitialized = true;
+        }
+
+        function bersihkan3D() { 
+            objekAktif.forEach(o => scene.remove(o)); objekAktif = []; 
+            camera.position.set(0, 5, 10); camera.lookAt(0,0,0); 
+            document.getElementById('chat-box').innerHTML = ''; chatHistory = [];
+        }
+
+        function buatGaris(mesh) { mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry), new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 }))); }
+
+        // --- RUMUS GEOMETRI ABSOLUT JARING (TANPA CELAH) ---
+        function bangunJaring(panjangX, kedalamanZ, tinggiY) {
+            const group = new THREE.Group();
+            const alasGeo = new THREE.PlaneGeometry(panjangX, kedalamanZ);
+            const alas = new THREE.Mesh(alasGeo, new THREE.MeshStandardMaterial({color: warnaAktif[0].hex, side: THREE.DoubleSide}));
+            buatGaris(alas);
+
+            const sayapKiriKananGeo = new THREE.PlaneGeometry(tinggiY, kedalamanZ);
+            const sayapDepanBelakangGeo = new THREE.PlaneGeometry(panjangX, tinggiY);
+
+            const buatSayap = (wIdx, geo, hingeX, hingeY, localX, localY) => {
+                const hinge = new THREE.Group();
+                hinge.position.set(hingeX, hingeY, 0);
+                const wing = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({color: warnaAktif[wIdx].hex, side: THREE.DoubleSide}));
+                wing.position.set(localX, localY, 0);
+                buatGaris(wing); hinge.add(wing); return hinge;
+            };
+
+            engselKiri = buatSayap(1, sayapKiriKananGeo, -panjangX/2, 0, -tinggiY/2, 0);
+            engselKanan = buatSayap(2, sayapKiriKananGeo, panjangX/2, 0, tinggiY/2, 0);
+            engselBelakang = buatSayap(3, sayapDepanBelakangGeo, 0, -kedalamanZ/2, 0, -tinggiY/2);
+            engselDepan = buatSayap(4, sayapDepanBelakangGeo, 0, kedalamanZ/2, 0, tinggiY/2);
+
+            engselTutup = new THREE.Group();
+            engselTutup.position.set(0, tinggiY/2, 0);
+            objTutup = new THREE.Mesh(alasGeo, new THREE.MeshStandardMaterial({color: warnaAktif[5].hex, side: THREE.DoubleSide}));
+            objTutup.position.set(0, kedalamanZ/2, 0);
+            buatGaris(objTutup); engselTutup.add(objTutup);
+            engselDepan.children[0].add(engselTutup);
+
+            group.add(alas, engselKiri, engselKanan, engselDepan, engselBelakang);
+            group.rotation.x = -Math.PI / 2;
+            return group;
+        }
+
+        function setPilihanJaringMisi1(pilihan) {
+            const btnKubus = document.getElementById('btn-pilih-kubus');
+            const btnBalok = document.getElementById('btn-pilih-balok');
+            if(pilihan === 'kubus') {
+                btnKubus.classList.add('toggle-btn-active'); btnKubus.classList.remove('toggle-btn-inactive');
+                btnBalok.classList.remove('toggle-btn-active'); btnBalok.classList.add('toggle-btn-inactive');
+            } else {
+                btnKubus.classList.remove('toggle-btn-active'); btnKubus.classList.add('toggle-btn-inactive');
+                btnBalok.classList.add('toggle-btn-active'); btnBalok.classList.remove('toggle-btn-inactive');
+            }
+            jaringM1Terpilih = pilihan;
+            updateObjekMisi1(true); 
+        }
+
+        function updateObjekMisi1(togleUpdate = false, isReset = false) {
+            objekAktif.forEach(o => scene.remove(o)); objekAktif = [];
+            isFoldedM1 = false; 
+            const btnLipat = document.getElementById('btn-lipat');
+            if(btnLipat) { btnLipat.innerText = "⛺ Lipat Jaring"; btnLipat.classList.remove('bg-gray-600'); btnLipat.classList.add('bg-green-600'); }
+
+            if(isReset) acakWarna();
+            
+            const nAlas = warnaAktif[0].nama;
+            const nTutup = warnaAktif[5].nama;
+            konteksMisi = `Misi 1: Melipat jaring ${jaringM1Terpilih}. Sisi alas berwarna ${nAlas}. Sisi Tutup Atap berwarna ${nTutup}.`;
+
+            if(togleUpdate && !isReset) {
+                kirimPesan(`Saya pilih Jaring ${jaringM1Terpilih === 'kubus' ? 'Kubus' : 'Balok'}!`, `Bagus! Pada jaring ${jaringM1Terpilih} ini, jika sisi warna ${nAlas} menempel di lantai, sisi warna apa yang akan menjadi atap?`);
+            } else if (isReset) {
+                kirimPesan("Berikan soal jaring yang baru.", `Wah warnanya diacak! Sekarang perhatikan, jika sisi warna ${nAlas} adalah alasnya, warna apa yang akan bergerak menjadi atap?`);
+            }
+            
+            grupUtama = new THREE.Group(); 
+            if (jaringM1Terpilih === 'kubus') { grupUtama.add(bangunJaring(1.2, 1.2, 1.2)); } 
+            else { grupUtama.add(bangunJaring(1.4, 1.0, 0.8)); }
+            scene.add(grupUtama); objekAktif.push(grupUtama);
+        }
+
+        // --- SETUP MISI 3D UTAMA ---
+        function bukaSimulator(no, reset=false) {
+            misiAktif = no; gantiLayar('layar-simulator'); inisialisasi3D();
+            
+            setTimeout(() => {
+                camera.aspect = document.getElementById('canvas-area').clientWidth / document.getElementById('canvas-area').clientHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(document.getElementById('canvas-area').clientWidth, document.getElementById('canvas-area').clientHeight);
+                
+                if(!reset) bersihkan3D();
+                updateNavigasiAtas();
+                
+                const panel = document.getElementById('panel-aksi'); 
+                const judul = document.getElementById('judul-misi-3d');
+                
+                const btnPutar180 = `<button onclick="animasiPutar180(this)" class="bg-cyan-500 hover:bg-cyan-600 text-white px-4 py-2 rounded-full font-bold shadow transform hover:scale-105 transition">🔄 Putar 180°</button>`;
+                const btnReset = `<button onclick="bukaSimulator(${no}, true)" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-full font-bold shadow transform hover:scale-105 transition">🔄 Soal Baru</button>`;
+
+                grupUtama = new THREE.Group(); 
+
+                if(no === 1) { 
+                    judul.innerText = "Misi 1: Jaring Kubus & Balok";
+                    if(!reset) {
+                        acakWarna(); 
+                        konteksMisi = `Misi 1: Melipat jaring ${jaringM1Terpilih}. Sisi alas berwarna ${warnaAktif[0].nama}. Sisi Tutup Atap berwarna ${warnaAktif[5].nama}.`;
+                        kirimPesan(`Halo!`, `Halo ${namaSiswa}! Di Misi 1 ini Bapak siapkan jaring-jaring 6 sisi. Pilih jaringnya, lalu amati: jika sisi warna ${warnaAktif[0].nama} ada di lantai, sisi warna apa yang jadi atapnya?`); 
+                    }
+                    
+                    panel.innerHTML = `
+                    <div class="flex gap-2 p-1 bg-indigo-100 rounded-full shadow-inner">
+                        <button id="btn-pilih-kubus" onclick="setPilihanJaringMisi1('kubus')" class="flex items-center px-4 py-1 rounded-full bg-white text-gray-700 font-bold shadow ${jaringM1Terpilih === 'kubus' ? 'toggle-btn-active' : 'toggle-btn-inactive'}">📦 KUBUS</button>
+                        <button id="btn-pilih-balok" onclick="setPilihanJaringMisi1('balok')" class="flex items-center px-4 py-1 rounded-full bg-white text-gray-700 font-bold shadow ${jaringM1Terpilih === 'balok' ? 'toggle-btn-active' : 'toggle-btn-inactive'}">🎁 BALOK</button>
+                    </div>
+                    <button id="btn-lipat" onclick="animasiM1(this)" class="bg-green-600 text-white px-4 py-2 rounded-full font-bold shadow-lg transform hover:scale-105 transition">⛺ Lipat Jaring</button>
+                    ${btnPutar180} ${btnReset}`;
+                    
+                    updateObjekMisi1(false, reset); 
+                } 
+                else if(no === 2) { 
+                    judul.innerText = "Misi 2: Apartemen Terguling";
+                    konteksMisi = "Misi 2: Bangunan Atap Merah, Depan Biru, Kanan Kuning, Kiri Abu-abu terguling 90 derajat ke kanan. Atap baru Abu-abu.";
+                    if(!reset) kirimPesan("Halo", "Gedung ini Atap Merah, Depan Biru, Kanan Kuning, Kiri Abu-abu. Jika ambruk ke Kanan, sisi mana yang jadi atap baru?");
+                    else kirimPesan("Berikan pertanyaan pancingan baru tentang rotasi gedung ini.");
+                    
+                    panel.innerHTML = `<button onclick="animasiM2(this)" class="bg-yellow-500 text-white px-4 py-2 rounded-full font-bold shadow transform hover:scale-105 transition">🔄 Ambruk 90°</button> ${btnPutar180} ${btnReset}`;
+                    
+                    objApartemen = new THREE.Mesh(new THREE.BoxGeometry(1.5, 3, 1.5), [
+                        new THREE.MeshStandardMaterial({color: paletWarna[0].hex}), // Kanan Kuning
+                        new THREE.MeshStandardMaterial({color: paletWarna[5].hex}), // Kiri Abu
+                        new THREE.MeshStandardMaterial({color: paletWarna[1].hex}), // Atas Merah
+                        new THREE.MeshStandardMaterial({color: paletWarna[5].hex}), // Bawah
+                        new THREE.MeshStandardMaterial({color: paletWarna[2].hex}), // Depan Biru
+                        new THREE.MeshStandardMaterial({color: paletWarna[5].hex})  // Belakang
+                    ]);
+                    buatGaris(objApartemen); grupUtama.add(objApartemen);
+                    scene.add(grupUtama); objekAktif.push(grupUtama);
+                }
+                else if(no === 3) { 
+                    judul.innerText = "Misi 3: Menghitung Kubus Tanpa Celah";
+                    isM3Pisah = false;
+                    konteksMisi = "Misi 3: Terdapat 15 kubus yang ditumpuk menjadi satu piramida tanpa celah sedikitpun. Siswa harus menghitung total seluruh kubusnya.";
+                    if(!reset) kirimPesan("Halo", "Bapak menyusun banyak kubus rapat tanpa celah. Coba hitung, berapa TOTAL seluruh kubusnya, termasuk yang tersembunyi di tengah dan di bawah?");
+                    else kirimPesan("Berikan pertanyaan scaffolding baru tentang menghitung total kubus yang tersembunyi.");
+
+                    panel.innerHTML = `<button id="btn-pisah" onclick="animasiM3(this)" class="bg-purple-600 text-white px-4 py-2 rounded-full font-bold shadow transform hover:scale-105 transition">💥 Pisahkan</button> ${btnPutar180} ${btnReset}`;
+                    
+                    grupKargo = new THREE.Group();
+                    const geoBox = new THREE.BoxGeometry(1.0, 1.0, 1.0);
+                    const matCube = new THREE.MeshStandardMaterial({color: 0x8b5cf6});
+                    
+                    // Membuat 15 kubus (Piramida: Base 3x3, Mid Cross 5, Top 1)
+                    const addCube = (x,y,z) => {
+                        let c = new THREE.Mesh(geoBox, matCube);
+                        c.position.set(x, y, z);
+                        c.userData = { ox: x, oy: y, oz: z }; // Simpan posisi asli
+                        buatGaris(c); grupKargo.add(c);
+                    };
+                    for(let x=-1; x<=1; x++) for(let z=-1; z<=1; z++) addCube(x, 0, z); // 9 Bawah
+                    addCube(0,1,0); addCube(-1,1,0); addCube(1,1,0); addCube(0,1,-1); addCube(0,1,1); // 5 Tengah
+                    addCube(0,2,0); // 1 Atas
+
+                    grupUtama.add(grupKargo); scene.add(grupUtama); objekAktif.push(grupUtama);
+                    camera.position.set(0, 6, 12); // Mundur sedikit karena objek lebih besar
+                }
+                else if(no === 4) { 
+                    judul.innerText = "Misi 4: Pola dari Udara";
+                    konteksMisi = "Misi 4: Susunan balok dengan tinggi acak. Jika dilihat tegak lurus dari atas langit, bentuknya adalah Tanda Tambah (atau Tanda Silang/Plus). JANGAN sebutkan bentuk huruf.";
+                    if(!reset) kirimPesan("Halo", "Bangunan ini tingginya acak. Jika kita terbangkan drone dan melihat lurus dari atas langit, bentuk bangun apa yang terlihat?");
+                    else kirimPesan("Berikan petunjuk scaffolding baru tentang melihat benda dari sudut pandang atas drone.");
+
+                    panel.innerHTML = `<button onclick="animasiM4(this)" class="bg-blue-600 text-white px-4 py-2 rounded-full font-bold shadow transform hover:scale-105 transition">🚁 Terbang Drone</button> ${btnPutar180} ${btnReset}`;
+                    
+                    grupKargo = new THREE.Group();
+                    const m = new THREE.MeshStandardMaterial({color: 0x10b981});
+                    
+                    // Susunan bentuk "Tanda Tambah"
+                    const pos = [
+                        {x:0, z:0, h:3}, // Tengah
+                        {x:-1, z:0, h:1}, {x:1, z:0, h:2}, // Kiri Kanan
+                        {x:0, z:-1, h:1.5}, {x:0, z:1, h:2.5} // Atas Bawah
+                    ];
+
+                    pos.forEach(p => {
+                        let b = new THREE.Mesh(new THREE.BoxGeometry(1.0, p.h, 1.0), m);
+                        b.position.set(p.x, p.h/2 - 0.5, p.z);
+                        buatGaris(b); grupKargo.add(b);
+                    });
+                    grupUtama.add(grupKargo); scene.add(grupUtama); objekAktif.push(grupUtama);
+                    camera.position.set(0, 6, 10); camera.lookAt(0,0,0);
+                }
+            }, 100);
+        }
+
+        // --- ANIMASI 3D ---
+        
+        function animasiPutar180(btn) {
+            btn.disabled = true; btn.classList.add('opacity-50');
+            const targetRotY = grupUtama.rotation.y + Math.PI; // Putar 180 Derajat
+            new TWEEN.Tween(grupUtama.rotation).to({ y: targetRotY }, 2000).easing(TWEEN.Easing.Cubic.InOut)
+            .onComplete(() => { btn.disabled = false; btn.classList.remove('opacity-50'); })
+            .start();
+        }
+
+        function animasiM1(btn) {
+            btn.disabled = true; btn.classList.add('opacity-50');
+            
+            const targetRot = isFoldedM1 ? 0 : Math.PI / 2;
+            const targetRotNeg = isFoldedM1 ? 0 : -Math.PI / 2;
+            
+            new TWEEN.Tween(engselKiri.rotation).to({ y: targetRot }, 1500).start();
+            new TWEEN.Tween(engselKanan.rotation).to({ y: targetRotNeg }, 1500).start();
+            new TWEEN.Tween(engselBelakang.rotation).to({ x: targetRotNeg }, 1500).start();
+            new TWEEN.Tween(engselDepan.rotation).to({ x: targetRot }, 1500).start();
+            new TWEEN.Tween(engselTutup.rotation).to({ x: targetRot }, 1500).delay(isFoldedM1 ? 0 : 300).start();
+            
+            setTimeout(() => { 
+                isFoldedM1 = !isFoldedM1; 
+                btn.innerText = isFoldedM1 ? "🏕️ Buka Jaring" : "⛺ Lipat Jaring";
+                
+                if(isFoldedM1) { btn.classList.remove('bg-green-600'); btn.classList.add('bg-gray-600'); }
+                else { btn.classList.remove('bg-gray-600'); btn.classList.add('bg-green-600'); }
+                btn.disabled = false; btn.classList.remove('opacity-50');
+
+                if(isFoldedM1 && levelTerbuka < 2) {
+                    kirimPesan(`Saya sudah melipatnya Pak Geo!`, `Tepat sekali! Sisi warna ${warnaAktif[5].nama} menutup rapat simetris menjadi atapnya! Bapak sudah membuka Kunci Misi 2 untukmu!`); 
+                    bukaLevel(2); updateNavigasiAtas(); 
+                }
+            }, 2000);
+        }
+
+        function animasiM2(btn) {
+            btn.disabled = true; btn.classList.add('opacity-50');
+            const childObj = grupUtama.children[0];
+            new TWEEN.Tween(childObj.rotation).to({ z: childObj.rotation.z - Math.PI / 2 }, 2000).easing(TWEEN.Easing.Bounce.Out)
+            .onComplete(() => { btn.disabled = false; btn.classList.remove('opacity-50'); }).start();
+
+            if(levelTerbuka < 3) {
+                setTimeout(() => { kirimPesan("Saya sudah memutarnya", "Luar biasa! Sisi kiri (Abu-abu) kini rebah sempurna menjadi atap baru. Kunci Misi 3 sudah terbuka!"); bukaLevel(3); updateNavigasiAtas(); }, 2500);
+            }
+        }
+
+        function animasiM3(btn) {
+            btn.disabled = true; btn.classList.add('opacity-50');
+            const scaleMul = isM3Pisah ? 1.0 : 1.6; // Meregang jika belum pisah
+            
+            grupKargo.children.forEach(c => {
+                new TWEEN.Tween(c.position).to({
+                    x: c.userData.ox * scaleMul,
+                    y: c.userData.oy * scaleMul,
+                    z: c.userData.oz * scaleMul
+                }, 1500).easing(TWEEN.Easing.Quadratic.Out).start();
+            });
+            
+            setTimeout(() => { 
+                isM3Pisah = !isM3Pisah;
+                btn.innerText = isM3Pisah ? "🧩 Satukan Lagi" : "💥 Pisahkan";
+                if(isM3Pisah) { btn.classList.remove('bg-purple-600'); btn.classList.add('bg-gray-600'); }
+                else { btn.classList.remove('bg-gray-600'); btn.classList.add('bg-purple-600'); }
+                btn.disabled = false; btn.classList.remove('opacity-50');
+
+                if(isM3Pisah && levelTerbuka < 4) {
+                    kirimPesan("Sudah dipisahkan", "Cerdas! Sekarang kamu bisa menghitung kubus yang ada di dalam dan bawah. Total semuanya ada 15 kubus! Kunci Misi 4 sudah terbuka!"); 
+                    bukaLevel(4); updateNavigasiAtas(); 
+                }
+            }, 1800);
+        }
+
+        function animasiM4(btn) {
+            btn.disabled = true; btn.classList.add('opacity-50');
+            new TWEEN.Tween(camera.position).to({ x: 0, y: 15, z: 0 }, 2500).easing(TWEEN.Easing.Cubic.InOut).start();
+            new TWEEN.Tween(camera.rotation).to({ x: -Math.PI/2, y: 0, z: 0 }, 2500).easing(TWEEN.Easing.Cubic.InOut).start();
+            setTimeout(() => { kirimPesan("Terbang", `Ucapkan selamat Nak atas keberhasilannya! 🏆 Dari atas tampak jelas bangun ini membentuk Tanda Tambah (Silang), dan petualangan spesial ini telah selesai sempurna!`); }, 3000);
+        }
+    </script>
+</body>
+</html>
